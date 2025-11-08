@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Budget Buddy</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="{{ url_for('dashboard') }}" class="logo">💰 Budget Buddy</a>
+            <div class="nav-links">
+                <span class="user-greeting">Hello, {{ current_user.username }}!</span>
+                <a href="{{ url_for('logout') }}" class="btn btn-outline">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="dashboard-container">
+        <div class="container">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="summary-cards">
+                <div class="summary-card income">
+                    <h3>Total Income</h3>
+                    <p class="amount">₹{{ "%.2f"|format(total_income) }}</p>
+                </div>
+                <div class="summary-card expense">
+                    <h3>Total Expenses</h3>
+                    <p class="amount">₹{{ "%.2f"|format(total_expenses) }}</p>
+                </div>
+                <div class="summary-card balance">
+                    <h3>Balance</h3>
+                    <p class="amount">₹{{ "%.2f"|format(balance) }}</p>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="tabs-navigation">
+                <button class="tab-button active" onclick="openTab(event, 'overview')">📊 Overview</button>
+                <button class="tab-button" onclick="openTab(event, 'charts')">📈 Charts & Analytics</button>
+                <button class="tab-button" onclick="openTab(event, 'savings')">💡 AI Savings Tips</button>
+                <button class="tab-button" onclick="openTab(event, 'investment')">🚀 AI Investment Goals</button>
+            </div>
+
+            <!-- Overview Tab -->
+            <div id="overview" class="tab-content active">
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h2>Add Transaction</h2>
+                        <form method="POST" action="{{ url_for('add_transaction') }}">
+                            <div class="form-group">
+                                <label for="type">Type</label>
+                                <select id="type" name="type" required>
+                                    <option value="income">Income</option>
+                                    <option value="expense">Expense</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="category">Category</label>
+                                <select id="category" name="category" required>
+                                    <option value="Salary">Salary</option>
+                                    <option value="Food">Food</option>
+                                    <option value="Transport">Transport</option>
+                                    <option value="Shopping">Shopping</option>
+                                    <option value="Entertainment">Entertainment</option>
+                                    <option value="Bills">Bills</option>
+                                    <option value="Healthcare">Healthcare</option>
+                                    <option value="Education">Education</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="amount">Amount (₹)</label>
+                                <input type="number" id="amount" name="amount" step="0.01" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="description">Description</label>
+                                <input type="text" id="description" name="description" placeholder="Optional">
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-full">Add Transaction</button>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <h2>Quick Stats</h2>
+                        <div class="quick-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Total Transactions</span>
+                                <span class="stat-value">{{ transactions|length }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Savings Rate</span>
+                                <span class="stat-value">
+                                    {% if total_income > 0 %}
+                                        {{ "%.1f"|format((balance / total_income) * 100) }}%
+                                    {% else %}
+                                        0%
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Average Expense</span>
+                                <span class="stat-value">
+                                    {% set expense_count = transactions|selectattr('type', 'equalto', 'expense')|list|length %}
+                                    {% if expense_count > 0 %}
+                                        ₹{{ "%.2f"|format(total_expenses / expense_count) }}
+                                    {% else %}
+                                        ₹0.00
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card transactions-card">
+                    <h2>Recent Transactions</h2>
+                    {% if transactions %}
+                        <div class="transactions-list">
+                            {% for transaction in transactions %}
+                                <div class="transaction-item {{ transaction.type }}">
+                                    <div class="transaction-info">
+                                        <h4>{{ transaction.category }}</h4>
+                                        <p class="transaction-desc">{{ transaction.description or 'No description' }}</p>
+                                        <p class="transaction-date">{{ transaction.date.strftime('%d %b %Y, %I:%M %p') }}</p>
+                                    </div>
+                                    <div class="transaction-amount-delete">
+                                        <p class="transaction-amount">
+                                            {% if transaction.type == 'income' %}
+                                                +₹{{ "%.2f"|format(transaction.amount) }}
+                                            {% else %}
+                                                -₹{{ "%.2f"|format(transaction.amount) }}
+                                            {% endif %}
+                                        </p>
+                                        <form method="POST" action="{{ url_for('delete_transaction', id=transaction.id) }}" style="display: inline;">
+                                            <button type="submit" class="btn-delete" onclick="return confirm('Are you sure?')">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="no-transactions">No transactions yet. Add your first transaction above!</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Charts & Analytics Tab -->
+            <div id="charts" class="tab-content">
+                {% if transactions %}
+                <div class="charts-grid">
+                    <!-- Expense by Category Chart -->
+                    <div class="card chart-card">
+                        <h2>📊 Expenses by Category</h2>
+                        <canvas id="expenseCategoryChart"></canvas>
+                    </div>
+
+                    <!-- Income vs Expense Chart -->
+                    <div class="card chart-card">
+                        <h2>💰 Income vs Expenses</h2>
+                        <canvas id="incomeExpenseChart"></canvas>
+                    </div>
+
+                    <!-- Monthly Trend Chart -->
+                    <div class="card chart-card full-width">
+                        <h2>📈 Monthly Transaction Trends</h2>
+                        <canvas id="monthlyTrendChart"></canvas>
+                    </div>
+
+                    <!-- Category Breakdown Table -->
+                    <div class="card chart-card full-width">
+                        <h2>📋 Category Breakdown</h2>
+                        <div class="category-breakdown">
+                            <table class="breakdown-table">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th>Amount (₹)</th>
+                                        <th>Percentage</th>
+                                        <th>Visual</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="categoryBreakdownBody">
+                                    <!-- Will be populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="card">
+                    <h2>📊 No Data Available</h2>
+                    <p>Add some transactions first to see charts and analytics!</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- AI Savings Tips Tab -->
+            <div id="savings" class="tab-content">
+                <div class="card ai-card">
+                    <h2>💡 AI-Powered Savings Suggestions</h2>
+                    <p class="ai-description">Our trained Machine Learning model analyzes your spending patterns and provides personalized advice. The model uses Decision Tree classification to understand your financial behavior.</p>
+                    
+                    <div class="ai-features">
+                        <div class="ai-feature-item">
+                            <span class="feature-emoji">🤖</span>
+                            <span>Trained ML Model</span>
+                        </div>
+                        <div class="ai-feature-item">
+                            <span class="feature-emoji">📊</span>
+                            <span>Pattern Recognition</span>
+                        </div>
+                        <div class="ai-feature-item">
+                            <span class="feature-emoji">🎯</span>
+                            <span>Personalized Insights</span>
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button onclick="trainAIModel()" class="btn btn-secondary btn-half">
+                            <span class="btn-icon">🔧</span> Train AI Model
+                        </button>
+                        <button onclick="getMLSavings()" class="btn btn-primary btn-half">
+                            <span class="btn-icon">✨</span> Get AI Analysis
+                        </button>
+                    </div>
+                    <div id="ai-savings-result"></div>
+                </div>
+            </div>
+
+            <!-- AI Investment Goals Tab -->
+            <div id="investment" class="tab-content">
+                <div class="card ai-card">
+                    <h2>📈 AI Investment Goal Planner</h2>
+                    <p class="ai-description">Our ML model evaluates your financial health and creates personalized investment strategies. Based on Decision Tree analysis of your transaction patterns.</p>
+                    
+                    <div class="ai-features">
+                        <div class="ai-feature-item">
+                            <span class="feature-emoji">🤖</span>
+                            <span>ML-Powered Analysis</span>
+                        </div>
+                        <div class="ai-feature-item">
+                            <span class="feature-emoji">📈</span>
+                            <span>Smart Recommendations</span>
+                        </div>
+                        <div class="ai-feature-item">
+                            <span class="feature-emoji">🎯</span>
+                            <span>Goal-Based Planning</span>
+                        </div>
+                    </div>
+
+                    <button onclick="getMLInvestment()" class="btn btn-primary btn-full btn-ai">
+                        <span class="btn-icon">🚀</span> Get Investment Plan
+                    </button>
+                    <div id="ai-investment-result"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get transaction data from Flask template
+        const transactionsData = [
+            {% for t in transactions %}
+            {
+                type: "{{ t.type }}",
+                category: "{{ t.category }}",
+                amount: {{ t.amount }},
+                date: "{{ t.date.strftime('%Y-%m-%d') }}"
+            }{% if not loop.last %},{% endif %}
+            {% endfor %}
+        ];
+
+        const totalIncome = {{ total_income }};
+        const totalExpenses = {{ total_expenses }};
+
+        // Tab switching functionality
+        function openTab(evt, tabName) {
+            // Hide all tab contents
+            const tabContents = document.getElementsByClassName('tab-content');
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove('active');
+            }
+
+            // Remove active class from all buttons
+            const tabButtons = document.getElementsByClassName('tab-button');
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].classList.remove('active');
+            }
+
+            // Show selected tab and mark button as active
+            document.getElementById(tabName).classList.add('active');
+            evt.currentTarget.classList.add('active');
+
+            // Initialize charts when charts tab is opened
+            if (tabName === 'charts' && transactionsData.length > 0) {
+                setTimeout(() => initializeCharts(), 100);
+            }
+        }
+
+        // Process transaction data for charts
+        function processTransactionData() {
+            const expensesByCategory = {};
+            const monthlyData = {};
+            
+            transactionsData.forEach(t => {
+                // Category breakdown
+                if (t.type === 'expense') {
+                    expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + t.amount;
+                }
+                
+                // Monthly trend
+                const month = t.date.substring(0, 7); // YYYY-MM
+                if (!monthlyData[month]) {
+                    monthlyData[month] = { income: 0, expense: 0 };
+                }
+                if (t.type === 'income') {
+                    monthlyData[month].income += t.amount;
+                } else {
+                    monthlyData[month].expense += t.amount;
+                }
+            });
+            
+            return { expensesByCategory, monthlyData };
+        }
+
+        // Initialize all charts
+        let chartsInitialized = false;
+        let chartInstances = [];
+
+        function initializeCharts() {
+            if (chartsInitialized) return;
+            chartsInitialized = true;
+
+            // Clear existing charts
+            chartInstances.forEach(chart => chart.destroy());
+            chartInstances = [];
+
+            const { expensesByCategory, monthlyData } = processTransactionData();
+
+            // Chart 1: Expense by Category (Doughnut)
+            const ctx1 = document.getElementById('expenseCategoryChart');
+            if (ctx1 && Object.keys(expensesByCategory).length > 0) {
+                const categories = Object.keys(expensesByCategory);
+                const amounts = Object.values(expensesByCategory);
+                
+                const chart1 = new Chart(ctx1, {
+                    type: 'doughnut',
+                    data: {
+                        labels: categories,
+                        datasets: [{
+                            data: amounts,
+                            backgroundColor: [
+                                '#667eea', '#764ba2', '#f093fb', '#4facfe',
+                                '#43e97b', '#fa709a', '#fee140', '#30cfd0',
+                                '#a8edea', '#fbc2eb'
+                            ],
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    padding: 15,
+                                    font: { size: 12 }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || '';
+                                        const value = context.parsed || 0;
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const percentage = ((value / total) * 100).toFixed(1);
+                                        return `${label}: ₹${value.toFixed(2)} (${percentage}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                chartInstances.push(chart1);
+            }
+
+            // Chart 2: Income vs Expense (Bar)
+            const ctx2 = document.getElementById('incomeExpenseChart');
+            if (ctx2) {
+                const chart2 = new Chart(ctx2, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Income', 'Expenses', 'Balance'],
+                        datasets: [{
+                            label: 'Amount (₹)',
+                            data: [totalIncome, totalExpenses, totalIncome - totalExpenses],
+                            backgroundColor: ['#27ae60', '#e74c3c', '#667eea'],
+                            borderWidth: 0,
+                            borderRadius: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '₹' + value.toLocaleString();
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return '₹' + context.parsed.y.toFixed(2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                chartInstances.push(chart2);
+            }
+
+            // Chart 3: Monthly Trend (Line)
+            const ctx3 = document.getElementById('monthlyTrendChart');
+            if (ctx3 && Object.keys(monthlyData).length > 0) {
+                const months = Object.keys(monthlyData).sort();
+                const incomeData = months.map(m => monthlyData[m].income);
+                const expenseData = months.map(m => monthlyData[m].expense);
+                
+                const chart3 = new Chart(ctx3, {
+                    type: 'line',
+                    data: {
+                        labels: months.map(m => {
+                            const date = new Date(m + '-01');
+                            return date.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+                        }),
+                        datasets: [
+                            {
+                                label: 'Income',
+                                data: incomeData,
+                                borderColor: '#27ae60',
+                                backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                                borderWidth: 3,
+                                fill: true,
+                                tension: 0.4
+                            },
+                            {
+                                label: 'Expenses',
+                                data: expenseData,
+                                borderColor: '#e74c3c',
+                                backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                                borderWidth: 3,
+                                fill: true,
+                                tension: 0.4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        interaction: {
+                            intersect: false,
+                            mode: 'index'
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '₹' + value.toLocaleString();
+                                    }
+                                }
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ': ₹' + context.parsed.y.toFixed(2);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                chartInstances.push(chart3);
+            }
+
+            // Populate category breakdown table
+            populateCategoryBreakdown(expensesByCategory);
+        }
+
+        // Populate category breakdown table
+        function populateCategoryBreakdown(expensesByCategory) {
+            const tbody = document.getElementById('categoryBreakdownBody');
+            if (!tbody) return;
+            
+            const total = Object.values(expensesByCategory).reduce((a, b) => a + b, 0);
+            
+            if (total === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No expense data available</td></tr>';
+                return;
+            }
+            
+            const sortedCategories = Object.entries(expensesByCategory)
+                .sort((a, b) => b[1] - a[1]);
+            
+            tbody.innerHTML = sortedCategories.map(([category, amount]) => {
+                const percentage = ((amount / total) * 100).toFixed(1);
+                return `
+                    <tr>
+                        <td><strong>${category}</strong></td>
+                        <td>₹${amount.toFixed(2)}</td>
+                        <td>${percentage}%</td>
+                        <td>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${percentage}%"></div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // AI Model Training
+        async function trainAIModel() {
+            const resultDiv = document.getElementById('ai-savings-result');
+            resultDiv.innerHTML = '<div class="ai-loading"><div class="spinner"></div><p>Training Machine Learning model...</p></div>';
+            
+            try {
+                const response = await fetch('{{ url_for("train_ai_model") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `<div class="ai-result-box training-box">
+                        <h3>✅ Model Training Complete!</h3>
+                        <p>${data.message}</p>
+                        <p style="margin-top: 10px;">You can now click "Get AI Analysis" to see predictions from your trained model.</p>
+                    </div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="ai-error">❌ Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="ai-error">❌ Failed to train model. Please try again.</div>';
+            }
+        }
+
+        // ML-based Savings Suggestions
+        async function getMLSavings() {
+            const resultDiv = document.getElementById('ai-savings-result');
+            resultDiv.innerHTML = '<div class="ai-loading"><div class="spinner"></div><p>Running ML model analysis...</p></div>';
+            
+            try {
+                const response = await fetch('{{ url_for("ai_ml_suggestion") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `<div class="ai-result-box savings-box">
+                        <h3>🤖 ML Model Prediction</h3>
+                        <div class="ai-content">${data.suggestion.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>
+                    </div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="ai-error">❌ ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="ai-error">❌ Failed to get predictions. Make sure model is trained first!</div>';
+            }
+        }
+
+        // ML-based Investment Goals
+        async function getMLInvestment() {
+            const resultDiv = document.getElementById('ai-investment-result');
+            resultDiv.innerHTML = '<div class="ai-loading"><div class="spinner"></div><p>Generating investment strategy with ML...</p></div>';
+            
+            try {
+                const response = await fetch('{{ url_for("ai_ml_investment") }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.innerHTML = `<div class="ai-result-box investment-box">
+                        <h3>📈 ML Investment Analysis</h3>
+                        <div class="ai-content">${data.suggestion.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</div>
+                    </div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="ai-error">❌ ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="ai-error">❌ Failed to generate investment plan. Ensure model is trained!</div>';
+            }
+        }
+    </script>
+</body>
+</html>
